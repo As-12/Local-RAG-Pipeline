@@ -1,0 +1,106 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: rag-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./data/ollama:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: rag-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - ./data/qdrant:/qdrant/storage
+
+  rag-api:
+    build:
+      context: ./rag-api
+    container_name: rag-api
+    restart: unless-stopped
+    depends_on:
+      - ollama
+      - qdrant
+    ports:
+      - "8080:8080"
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      QDRANT_URL: http://qdrant:6333
+      COLLECTION_NAME: local_docs
+      EMBEDDING_MODEL: all-minilm
+      LLM_MODEL: qwen2.5:7b-instruct-q4_K_M
+      VECTOR_SIZE: "384"
+      INBOX_DIR: /data/inbox
+      PROCESSED_DIR: /data/processed
+      FAILED_DIR: /data/failed
+      CHUNK_SIZE: "700"
+      CHUNK_OVERLAP: "120"
+      TOP_K: "5"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    volumes:
+      - ./data/inbox:/data/inbox
+      - ./data/processed:/data/processed
+      - ./data/failed:/data/failed
+
+  dcgm-exporter:
+    image: nvidia/dcgm-exporter:latest
+    container_name: rag-dcgm-exporter
+    restart: unless-stopped
+    ports:
+      - "9400:9400"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: rag-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: rag-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data/grafana:/var/lib/grafana
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: rag-jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686"
+      - "4318:4318"
+      - "4317:4317"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: rag-otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otel-collector.yml"]
+    volumes:
+      - ./observability/otel-collector.yml:/etc/otel-collector.yml:ro
+    depends_on:
+      - jaeger
