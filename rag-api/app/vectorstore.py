@@ -1,5 +1,6 @@
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
+
 from app.config import settings
 
 
@@ -42,9 +43,11 @@ def upsert_chunks(points: list[PointStruct]) -> None:
 
 
 def search(vector: list[float], top_k: int):
-    return client.search(
+    response = client.query_points(
         collection_name=settings.collection_name,
-        query_vector=vector,
+        query=vector,
         limit=top_k,
         with_payload=True,
     )
+
+    return response.points
