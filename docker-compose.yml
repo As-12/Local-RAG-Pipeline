@@ -104,3 +104,15 @@ services:
       - ./observability/otel-collector.yml:/etc/otel-collector.yml:ro
     depends_on:
       - jaeger
+
+  discord-bot:
+    build:
+      context: ./integration/discord-bot
+    container_name: rag-discord-bot
+    restart: unless-stopped
+    depends_on:
+      - rag-api
+    environment:
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID}
+      RAG_API_URL: http://rag-api:8080
